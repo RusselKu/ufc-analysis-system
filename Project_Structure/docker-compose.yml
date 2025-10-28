@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - airflow_net
+
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    networks:
+      - airflow_net
+
+  webserver:
+    build: .
+    depends_on:
+      - postgres
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      PYTHONPATH: /opt/airflow
+      AIRFLOW__MONGO__CONN_URI: "mongodb://root:example@mongodb:27017/project_db?authSource=admin"
+      AIRFLOW__CORE__PLUGINS_FOLDER: "/opt/airflow/utils"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./utils:/opt/airflow/utils
+      - ./logs:/opt/airflow/logs
+      - ./requirements.txt:/requirements.txt
+    ports:
+      - "8080:8080"
+    command: webserver
+    networks:
+      - airflow_net
+
+  scheduler:
+    build: .
+    depends_on:
+      - postgres
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      PYTHONPATH: /opt/airflow
+      AIRFLOW__MONGO__CONN_URI: "mongodb://root:example@mongodb:27017/project_db?authSource=admin"
+      AIRFLOW__CORE__PLUGINS_FOLDER: "/opt/airflow/utils"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./utils:/opt/airflow/utils
+      - ./logs:/opt/airflow/logs
+    command: scheduler
+    networks:
+      - airflow_net
+
+  streamlit:
+    build:
+      context: ./streamlit_app
+      dockerfile: Dockerfile
+    depends_on:
+      - mongodb
+    volumes:
+      - ./streamlit_app:/app
+    ports:
+      - "8501:8501"
+    environment:
+      - MONGO_URI=mongodb://root:example@mongodb:27017/project_db?authSource=admin
+    networks:
+      - airflow_net
+
+volumes:
+  postgres_data:
+  mongodb_data:
+
+networks:
+  airflow_net:
+    driver: bridge
